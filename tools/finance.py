@@ -39,6 +39,27 @@ def obtenir_cours_action(symbole: str) -> str:
         return f"Erreur lors de la récupération de '{symbole}' : {e}"
 
 
+def get_stock_news(symbole: str) -> str:
+    """Retourne les 5 dernières actualités d'une action via yfinance."""
+    symbole = symbole.strip().upper()
+    ticker_symbol = TICKER_MAP.get(symbole, symbole)
+    try:
+        ticker = yf.Ticker(ticker_symbol)
+        news = ticker.news
+        if not news:
+            return f"Aucune actualité trouvée pour {symbole}."
+
+        result = f"Actualités récentes — {symbole} :\n\n"
+        for i, article in enumerate(news[:5], 1):
+            content = article.get("content", {})
+            title = content.get("title", "Sans titre")
+            summary = content.get("summary", "Pas de résumé")
+            result += f"{i}. {title}\n{summary}\n---\n"
+        return result
+    except Exception as e:
+        return f"Erreur lors de la récupération des actualités de '{symbole}' : {e}"
+
+
 def obtenir_cours_crypto(symbole: str) -> str:
     """Retourne le cours réel d'une crypto (prix, variation du jour, volume)."""
     symbole = symbole.strip().upper()

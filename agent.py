@@ -3,28 +3,32 @@ import os
 
 from langchain_classic.tools import Tool
 from tools.database       import rechercher_client, rechercher_produit
-from tools.finance        import obtenir_cours_action, obtenir_cours_crypto
-from tools.calculs        import calculer_tva, calculer_interets_composes, calculer_marge, calculer_mensualite_pret
+from tools.finance        import obtenir_cours_action, obtenir_cours_crypto, get_stock_news
+from tools.calculs        import (
+    calculer_tva,
+    calculer_interets_composes,
+    calculer_marge,
+    calculer_mensualite_pret,
+    python_repl_tool,
+)
 from tools.api_publique   import convertir_devise
 from tools.recommendation import resumer_texte, formater_rapport, extraire_mots_cles, recommander_produits
 from tools.portefeuille   import calculer_portefeuille
 
-# ── B2 : PythonREPLTool ───────────────────────────────────────────────────────
-from langchain_experimental.tools import PythonREPLTool
-
-python_repl = PythonREPLTool()
-python_repl.description = (
-    'Exécute du code Python pour des calculs complexes ou traitements '
-    'de données non couverts par les autres outils. '
-    'Entrée : code Python valide sous forme de chaîne.'
-)
-# ATTENTION SECURITE : cet outil exécute du code arbitraire.
-# Ne jamais utiliser en production sans sandbox.
-
 # ── A3 : Recherche web (TavilySearch) ────────────────────────────────────────
 from langchain_community.tools.tavily_search import TavilySearchResults
 
-tavily = TavilySearchResults(max_results=3)
+TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
+tavily = TavilySearchResults(max_results=3) if TAVILY_API_KEY else None
+
+
+def _recherche_web_fallback(query: str) -> str:
+    if tavily is None:
+        return (
+            "Recherche web indisponible : TAVILY_API_KEY manquante. "
+            f"Question demandee : {query}"
+        )
+    return tavily.run(query)
 
 
 tools = [
@@ -38,9 +42,13 @@ tools = [
                      'Retourne prix HT, TVA, prix TTC, stock.'),
 
     # ── Outil 2 : Données financières (A2) ───────────────────────────────────
-    Tool(name='cours_action', func=obtenir_cours_action,
+    Tool(name='get_stock_price', func=obtenir_cours_action,
          description='Cours boursier réel d\'une action via yfinance. '
                      'Entrée : symbole majuscule ex AAPL, MSFT, TSLA, LVMH, AIR.'),
+
+    Tool(name='get_stock_news', func=get_stock_news,
+         description='5 dernières actualités d\'une action via yfinance. '
+                     'Entrée : symbole majuscule ex AAPL, TSLA.'),
 
     Tool(name='cours_crypto', func=obtenir_cours_crypto,
          description='Cours réel d\'une crypto via yfinance. '
@@ -85,38 +93,48 @@ tools = [
                      'Entrée : "budget,categorie,type_compte" ex "300,Informatique,Premium".'),
 
     # ── Outil 7 : Recherche web (A3) ─────────────────────────────────────────
-    Tool(name='recherche_web', func=tavily.run,
+    Tool(name='recherche_web', func=_recherche_web_fallback,
          description='Recherche web en temps réel : actualités financières, informations '
                      'sur une entreprise, résultats trimestriels, cours récents. '
                      'Entrée : question en langage naturel.'),
 
-    # ── Outil B2 : Python REPL ───────────────────────────────────────────────
-    python_repl,
 ]
 
-from langchain_classic.agents import AgentExecutor, create_react_agent
+if python_repl_tool is not None:
+    tools.append(python_repl_tool)
+
+from langchain_classic.agents import create_tool_calling_agent, AgentExecutor
 from langchain_openai import ChatOpenAI
-from langchain_classic import hub
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 
 def creer_agent():
-    """Crée et retourne un agent LangChain ReAct configuré."""
+    if not os.getenv('OPENAI_API_KEY'):
+        raise RuntimeError("OPENAI_API_KEY manquante.")
 
     llm = ChatOpenAI(
-        model="gpt-4o-mini",
+        model="gpt-4o",
         temperature=0,
         openai_api_key=os.getenv('OPENAI_API_KEY')
     )
 
-    prompt = hub.pull("hwchase17/react")
-    agent = create_react_agent(llm=llm, tools=tools, prompt=prompt)
+    prompt = ChatPromptTemplate.from_messages([
+        ("system",
+         "Tu es un assistant analyste financier.\n"
+         "- Pour le cours ou les infos d'une action, utilise get_stock_price.\n"
+         "- Pour les actualités d'une action, utilise get_stock_news.\n"
+         "- Pour TOUT calcul mathématique, utilise TOUJOURS python_repl avec print().\n"
+         "- Ne calcule jamais de tête."),
+        ("human", "{input}"),
+        MessagesPlaceholder("agent_scratchpad"),
+    ])
 
-    agent_executor = AgentExecutor(
+    agent = create_tool_calling_agent(llm=llm, tools=tools, prompt=prompt)
+
+    return AgentExecutor(
         agent=agent,
         tools=tools,
         verbose=True,
         max_iterations=10,
         handle_parsing_errors=True
     )
-
-    return agent_executor

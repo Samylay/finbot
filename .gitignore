@@ -7,3 +7,4 @@ venv/
 database.db
 *.egg-info/
 .DS_Store
+tp_stagiaire.pdf

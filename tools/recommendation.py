@@ -1,5 +1,3 @@
-# TODO: Logique de recommandation d'investissement
-
 import re
 from datetime import datetime
  
@@ -51,8 +49,20 @@ def recommander_produits(input_str: str) -> str:
     Entrée : "budget,categorie,type_compte"
     Exemple : "300,Informatique,Premium"
     """
-    budget, categorie, type_compte = input_str.strip().split(',')
-    budget = float(budget)
+    parties = [partie.strip() for partie in input_str.strip().split(',')]
+    if len(parties) != 3:
+        return (
+            "Format invalide. Utilise : budget,categorie,type_compte "
+            'ex "300,Informatique,Premium".'
+        )
+
+    budget_str, categorie, type_compte = parties
+
+    try:
+        budget = float(budget_str)
+    except ValueError:
+        return f"Budget invalide : '{budget_str}'"
+
     filtres = [
         p for p in CATALOGUE
         if p['prix'] <= budget
@@ -66,5 +76,4 @@ def recommander_produits(input_str: str) -> str:
     for i, p in enumerate(filtres[:5], 1):
         result += f"  {i}. {p['nom']} – {p['prix']:.2f}€ – ⭐{p['score']}\n"
     return result
-
 

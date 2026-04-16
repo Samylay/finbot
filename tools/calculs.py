@@ -1,6 +1,17 @@
 # tools/calculs.py
-# TODO: Instancier et exposer le PythonREPLTool
-# from langchain_experimental.tools import PythonREPLTool
+
+try:
+    from langchain_experimental.tools import PythonREPLTool
+except ImportError:
+    PythonREPLTool = None
+
+
+python_repl_tool = PythonREPLTool() if PythonREPLTool is not None else None
+if python_repl_tool is not None:
+    python_repl_tool.description = (
+        "Execute du code Python pour les calculs complexes. "
+        "Utilise print(...) pour retourner un resultat lisible."
+    )
 
  
 def calculer_tva(input_str: str) -> str:
@@ -30,6 +41,10 @@ def calculer_mensualite_pret(input_str: str) -> str:
     """Mensualité de prêt. Entrée : "capital,taux_annuel,duree_mois" """
     c, t, d = input_str.strip().split(',')
     K, r, n = float(c), float(t)/100/12, int(d)
-    M = K * (r * (1+r)**n) / ((1+r)**n - 1)
+    if n <= 0:
+        return "Erreur : la duree doit etre superieure a 0."
+    if r == 0:
+        M = K / n
+    else:
+        M = K * (r * (1+r)**n) / ((1+r)**n - 1)
     return f"Mensualité : {M:.2f}€/mois | Coût total : {M*n:,.2f}€"
-
