@@ -1,9 +1,13 @@
 # agent.py
 import os
 
+from langchain_classic.agents import create_tool_calling_agent, AgentExecutor
 from langchain_classic.tools import Tool
-from tools.database       import rechercher_client, rechercher_produit
-from tools.finance        import obtenir_cours_action, obtenir_cours_crypto, get_stock_news
+from langchain_community.tools.tavily_search import TavilySearchResults
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_openai import ChatOpenAI
+
+from tools.api_publique   import convertir_devise
 from tools.calculs        import (
     calculer_tva,
     calculer_interets_composes,
@@ -11,24 +15,17 @@ from tools.calculs        import (
     calculer_mensualite_pret,
     python_repl_tool,
 )
-from tools.api_publique   import convertir_devise
-from tools.recommendation import resumer_texte, formater_rapport, extraire_mots_cles, recommander_produits
+from tools.database       import rechercher_client, rechercher_produit
+from tools.finance        import obtenir_cours_action, obtenir_cours_crypto, get_stock_news
 from tools.portefeuille   import calculer_portefeuille
-
-# ── A3 : Recherche web (TavilySearch) ────────────────────────────────────────
-from langchain_community.tools.tavily_search import TavilySearchResults
-
-TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
-tavily = TavilySearchResults(max_results=3) if TAVILY_API_KEY else None
+from tools.recommendation import resumer_texte, formater_rapport, extraire_mots_cles, recommander_produits
 
 
-def _recherche_web_fallback(query: str) -> str:
-    if tavily is None:
-        return (
-            "Recherche web indisponible : TAVILY_API_KEY manquante. "
-            f"Question demandee : {query}"
-        )
-    return tavily.run(query)
+def _make_tavily_tool():
+    api_key = os.getenv("TAVILY_API_KEY")
+    if not api_key:
+        return lambda q: "Recherche web indisponible : TAVILY_API_KEY manquante."
+    return TavilySearchResults(max_results=3).run
 
 
 tools = [
@@ -93,7 +90,7 @@ tools = [
                      'Entrée : "budget,categorie,type_compte" ex "300,Informatique,Premium".'),
 
     # ── Outil 7 : Recherche web (A3) ─────────────────────────────────────────
-    Tool(name='recherche_web', func=_recherche_web_fallback,
+    Tool(name='recherche_web', func=_make_tavily_tool(),
          description='Recherche web en temps réel : actualités financières, informations '
                      'sur une entreprise, résultats trimestriels, cours récents. '
                      'Entrée : question en langage naturel.'),
@@ -102,10 +99,6 @@ tools = [
 
 if python_repl_tool is not None:
     tools.append(python_repl_tool)
-
-from langchain_classic.agents import create_tool_calling_agent, AgentExecutor
-from langchain_openai import ChatOpenAI
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 
 def creer_agent():
@@ -123,7 +116,7 @@ def creer_agent():
          "Tu es un assistant analyste financier.\n"
          "- Pour le cours ou les infos d'une action, utilise get_stock_price.\n"
          "- Pour les actualités d'une action, utilise get_stock_news.\n"
-         "- Pour TOUT calcul mathématique, utilise TOUJOURS python_repl avec print().\n"
+         "- Pour TOUT calcul mathématique, utilise TOUJOURS Python_REPL avec print().\n"
          "- Ne calcule jamais de tête."),
         ("human", "{input}"),
         MessagesPlaceholder("agent_scratchpad"),

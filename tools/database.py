@@ -13,25 +13,19 @@ def _connect():
 def rechercher_client(query: str) -> str:
     """Recherche un client par ID ou par nom (partiel)."""
     query = query.strip()
-    conn = _connect()
-    cur = conn.cursor()
-
-    # Recherche par ID exact
-    cur.execute(
-        "SELECT nom, solde_compte, type_compte FROM clients WHERE id = ?",
-        (query.upper(),)
-    )
-    row = cur.fetchone()
-
-    if not row:
-        # Recherche par nom (insensible à la casse)
+    with _connect() as conn:
+        cur = conn.cursor()
         cur.execute(
-            "SELECT nom, solde_compte, type_compte FROM clients WHERE LOWER(nom) LIKE ?",
-            (f"%{query.lower()}%",)
+            "SELECT nom, solde_compte, type_compte FROM clients WHERE id = ?",
+            (query.upper(),)
         )
         row = cur.fetchone()
-
-    conn.close()
+        if not row:
+            cur.execute(
+                "SELECT nom, solde_compte, type_compte FROM clients WHERE LOWER(nom) LIKE ?",
+                (f"%{query.lower()}%",)
+            )
+            row = cur.fetchone()
 
     if row:
         return f"Client : {row[0]} | Solde : {row[1]:.2f} € | Type de compte : {row[2]}"
@@ -41,25 +35,19 @@ def rechercher_client(query: str) -> str:
 def rechercher_produit(query: str) -> str:
     """Recherche un produit par ID ou par nom. Retourne prix HT, TVA, prix TTC, stock."""
     query = query.strip()
-    conn = _connect()
-    cur = conn.cursor()
-
-    # Recherche par ID exact
-    cur.execute(
-        "SELECT nom, prix_ht, stock FROM produits WHERE id = ?",
-        (query.upper(),)
-    )
-    row = cur.fetchone()
-
-    if not row:
-        # Recherche par nom (insensible à la casse)
+    with _connect() as conn:
+        cur = conn.cursor()
         cur.execute(
-            "SELECT nom, prix_ht, stock FROM produits WHERE LOWER(nom) LIKE ?",
-            (f"%{query.lower()}%",)
+            "SELECT nom, prix_ht, stock FROM produits WHERE id = ?",
+            (query.upper(),)
         )
         row = cur.fetchone()
-
-    conn.close()
+        if not row:
+            cur.execute(
+                "SELECT nom, prix_ht, stock FROM produits WHERE LOWER(nom) LIKE ?",
+                (f"%{query.lower()}%",)
+            )
+            row = cur.fetchone()
 
     if row:
         tva = row[1] * 0.20
